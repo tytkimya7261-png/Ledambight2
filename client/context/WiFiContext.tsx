@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef } from "react";
 import { Platform, PermissionsAndroid } from "react-native";
 
 export interface WiFiDevice {
@@ -55,6 +55,8 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
   const [isScanning, setIsScanning] = useState(false);
   const [isWiFiEnabled, setIsWiFiEnabled] = useState(true);
   const [udpSocket, setUdpSocket] = useState<any>(null);
+  const seqRef = useRef<number>(0);
+  const lastRegionsRef = useRef<string[]>(['', '', '', '']);
 
   useEffect(() => {
     checkWiFiStatus();
@@ -345,14 +347,23 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
       }
 
       const regions = [colors.top, colors.right, colors.bottom, colors.left];
-      const rgbValues: number[] = [];
 
-      for (const color of regions) {
-        rgbValues.push(...hexToRgbBytes(color));
+      // Detect changed regions (delta)
+      const changedIndexes: number[] = [];
+      for (let i = 0; i < regions.length; i++) {
+        if (regions[i] !== lastRegionsRef.current[i]) {
+          changedIndexes.push(i);
+        }
       }
 
+      // Update last sent regions
+      lastRegionsRef.current = [...regions];
+
       if (Platform.OS === 'web') {
-        console.log(`[MOCK] Bölge renkleri gönderildi -> ${connectedDevice.name}`, colors);
+        console.log(`[MOCK] Bölge renkleri gönderildi -> ${connectedDevice.name}`, {
+          regions,
+          changedIndexes,
+        });
         return;
       }
 
@@ -362,7 +373,42 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const packet = Buffer.from([1, ...rgbValues]);
+        // Header: [magic(2), version(1), flags(1), seq(2), ts(2)] = 8 bytes
+        const MAGIC = 0xabcd;
+        const version = 1;
+        const isDelta = changedIndexes.length > 0 && changedIndexes.length < regions.length;
+        const flags = isDelta ? 1 : 0;
+        seqRef.current = (seqRef.current + 1) & 0xffff;
+        const seq = seqRef.current;
+        const ts = Date.now() & 0xffff;
+
+        const header = Buffer.allocUnsafe(8);
+        header.writeUInt16BE(MAGIC, 0);
+        header.writeUInt8(version, 2);
+        header.writeUInt8(flags, 3);
+        header.writeUInt16BE(seq, 4);
+        header.writeUInt16BE(ts, 6);
+
+        let payload: Buffer;
+
+        if (isDelta) {
+          // Payload: [CMD=2, count(1), (idx(1), R(1),G(1),B(1))...]
+          const entries: number[] = [];
+          for (const idx of changedIndexes) {
+            const rgb = hexToRgbBytes(regions[idx]);
+            entries.push(idx, rgb[0], rgb[1], rgb[2]);
+          }
+          payload = Buffer.from([2, changedIndexes.length, ...entries]);
+        } else {
+          // Full payload: [CMD=1, 4 * (R,G,B)]
+          const rgbValues: number[] = [];
+          for (const color of regions) {
+            rgbValues.push(...hexToRgbBytes(color));
+          }
+          payload = Buffer.from([1, ...rgbValues]);
+        }
+
+        const packet = Buffer.concat([header, payload]);
 
         udpSocket.send(
           packet,
@@ -374,7 +420,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
             if (err) {
               console.error('Bölge renkleri gönderme hatası:', err);
             } else {
-              console.log(`Bölge renkleri gönderildi -> ${connectedDevice.name}`);
+              console.log(`Bölge renkleri gönderildi -> ${connectedDevice.name} (seq=${seq}, delta=${isDelta})`);
             }
           }
         );
