@@ -72,14 +72,20 @@ export default function CalibrationScreen() {
     yValue: SharedValue<number>,
     scale: SharedValue<number>
   ) => {
+    const startX = useSharedValue(0);
+    const startY = useSharedValue(0);
+    
     return Gesture.Pan()
       .onStart(() => {
+        startX.value = xValue.value;
+        startY.value = yValue.value;
         scale.value = withSpring(1.3, { damping: 15, stiffness: 300 });
         runOnJS(triggerHaptic)();
       })
       .onUpdate((event) => {
-        const newX = Math.max(HANDLE_SIZE / 2, Math.min(SCREEN_WIDTH - HANDLE_SIZE / 2, xValue.value + event.translationX));
-        const newY = Math.max(insets.top + HANDLE_SIZE / 2, Math.min(SCREEN_HEIGHT - insets.bottom - HANDLE_SIZE / 2, yValue.value + event.translationY));
+        // Hassasiyeti azaltmak için translationX/Y'yi 0.5 ile çarp
+        const newX = Math.max(HANDLE_SIZE / 2, Math.min(SCREEN_WIDTH - HANDLE_SIZE / 2, startX.value + event.translationX * 0.5));
+        const newY = Math.max(insets.top + HANDLE_SIZE / 2, Math.min(SCREEN_HEIGHT - insets.bottom - HANDLE_SIZE / 2, startY.value + event.translationY * 0.5));
         xValue.value = newX;
         yValue.value = newY;
       })

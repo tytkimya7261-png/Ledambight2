@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Platform, Linking, Pressable, useWindowDimensions } from "react-native";
+import { View, StyleSheet, Platform, Linking, Pressable, useWindowDimensions, Dimensions } from "react-native";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -16,8 +16,41 @@ import { RegionColors, analyzeRegions } from "@/lib/colorAnalyzer";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { Feather } from "@expo/vector-icons";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import Svg, { Polygon } from 'react-native-svg';
+
 
 type CameraNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const FRAME_PROCESSOR_FPS = 5;
+
+interface CropOverlayPreviewProps {
+  corners: {
+    topLeft: { x: number; y: number };
+    topRight: { x: number; y: number };
+    bottomRight: { x: number; y: number };
+    bottomLeft: { x: number; y: number };
+  };
+}
+
+function CropOverlayPreview({ corners }: CropOverlayPreviewProps) {
+  const points = `${corners.topLeft.x * SCREEN_WIDTH},${corners.topLeft.y * SCREEN_HEIGHT} ${corners.topRight.x * SCREEN_WIDTH},${corners.topRight.y * SCREEN_HEIGHT} ${corners.bottomRight.x * SCREEN_WIDTH},${corners.bottomRight.y * SCREEN_HEIGHT} ${corners.bottomLeft.x * SCREEN_WIDTH},${corners.bottomLeft.y * SCREEN_HEIGHT}`;
+
+  return (
+    <View style={styles.cropOverlayContainer} pointerEvents="none">
+      <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFill}>
+        <Polygon
+          points={points}
+          fill="transparent"
+          stroke={Colors.dark.accent}
+          strokeWidth="2"
+          strokeDasharray="5,5"
+        />
+      </Svg>
+    </View>
+  );
+}
+
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -29,14 +62,14 @@ export default function CameraScreen() {
     left: "#2A3340",
     dominant: "#2A3340",
   });
-  
+
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const navigation = useNavigation<CameraNavigationProp>();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  
+
   const { connectedDevice, sendRegionColors } = useWiFi();
   const { settings } = useSettings();
 
@@ -61,27 +94,27 @@ export default function CameraScreen() {
         // Create an Image to load the photo
         const img = new Image();
         img.crossOrigin = "anonymous";
-        
+
         img.onload = () => {
           const canvas = document.createElement("canvas");
           canvas.width = img.width;
           canvas.height = img.height;
-          
+
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
-          
+
           ctx.drawImage(img, 0, 0);
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          
+
           const newColors = analyzeRegions(
             imageData.data,
             canvas.width,
             canvas.height,
             settings.cropCorners
           );
-          
+
           setColors(newColors);
-          
+
           if (connectedDevice) {
             sendRegionColors({
               top: newColors.top,
@@ -91,7 +124,7 @@ export default function CameraScreen() {
             });
           }
         };
-        
+
         img.src = photo.uri;
       } catch (error) {
         console.error("Error capturing frame:", error);
@@ -153,7 +186,7 @@ export default function CameraScreen() {
 
   if (!permission.granted) {
     const canAskAgain = permission.canAskAgain;
-    
+
     return (
       <ThemedView style={[styles.container, { backgroundColor: Colors.dark.backgroundRoot }]}>
         <View style={[styles.permissionContainer, { paddingTop: headerHeight + Spacing.xl }]}>
@@ -164,7 +197,7 @@ export default function CameraScreen() {
           <ThemedText style={styles.permissionDescription}>
             Ekrandaki renkleri algılayabilmek için kamera erişimine ihtiyacımız var.
           </ThemedText>
-          
+
           {canAskAgain ? (
             <Pressable
               style={({ pressed }) => [styles.permissionButton, pressed && styles.buttonPressed]}
@@ -225,21 +258,9 @@ export default function CameraScreen() {
               </View>
             )}
 
-            {settings.isCalibrated && settings.cropCorners ? (
-              <View style={styles.cropOverlayContainer} pointerEvents="none">
-                <View
-                  style={[
-                    styles.cropOverlay,
-                    {
-                      left: `${settings.cropCorners.topLeft.x * 100}%`,
-                      top: `${settings.cropCorners.topLeft.y * 100}%`,
-                      width: `${(settings.cropCorners.topRight.x - settings.cropCorners.topLeft.x) * 100}%`,
-                      height: `${(settings.cropCorners.bottomLeft.y - settings.cropCorners.topLeft.y) * 100}%`,
-                    },
-                  ]}
-                />
-              </View>
-            ) : null}
+            {settings.isCalibrated && settings.cropCorners && (
+              <CropOverlayPreview corners={settings.cropCorners} />
+            )}
           </View>
         </CameraView>
       </View>

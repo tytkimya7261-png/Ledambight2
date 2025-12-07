@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
 import { Platform, PermissionsAndroid } from "react-native";
 
@@ -61,21 +60,25 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     checkWiFiStatus();
   }, []);
 
-  const checkWiFiStatus = async () => {
-    if (Platform.OS === "web") {
+  const checkWiFiStatus = useCallback(async () => {
+    if (Platform.OS === 'web') {
       setIsWiFiEnabled(true);
       return;
     }
 
     try {
       const WifiManager = require("react-native-wifi-reborn").default;
-      const isEnabled = await WifiManager.isEnabled();
-      setIsWiFiEnabled(isEnabled);
+      if (WifiManager && typeof WifiManager.isEnabled === 'function') {
+        const enabled = await WifiManager.isEnabled();
+        setIsWiFiEnabled(enabled);
+      } else {
+        setIsWiFiEnabled(false);
+      }
     } catch (error) {
       console.error("WiFi status check error:", error);
       setIsWiFiEnabled(false);
     }
-  };
+  }, []);
 
   const requestWiFiPermissions = async () => {
     if (Platform.OS === "android") {
@@ -84,7 +87,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
         ]);
-        
+
         return (
           permissions["android.permission.ACCESS_FINE_LOCATION"] === PermissionsAndroid.RESULTS.GRANTED &&
           permissions["android.permission.ACCESS_COARSE_LOCATION"] === PermissionsAndroid.RESULTS.GRANTED
@@ -109,17 +112,17 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
   const startScan = useCallback(async () => {
     console.log('startScan çağrıldı');
-    
+
     if (Platform.OS === 'web') {
       setIsScanning(true);
       setDevices([]);
-      
+
       setTimeout(() => {
         console.log('Mock cihazlar yükleniyor...');
         setDevices(MOCK_DEVICES);
         setIsScanning(false);
       }, 1500);
-      
+
       return;
     }
 
@@ -134,14 +137,14 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
     try {
       console.log('Gerçek WiFi taraması başlatılıyor...');
-      
+
       const dgram = require('react-native-udp');
       const socket = dgram.createSocket('udp4');
-      
+
       socket.bind(BROADCAST_PORT, () => {
         socket.setBroadcast(true);
         console.log(`UDP socket ${BROADCAST_PORT} portunda dinlemeye başladı`);
-        
+
         const sendDiscovery = () => {
           const discoveryMessage = Buffer.from('ESP_LED_DISCOVERY');
           socket.send(
@@ -158,9 +161,9 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         };
 
         sendDiscovery();
-        
+
         const interval = setInterval(sendDiscovery, 3000);
-        
+
         setTimeout(() => {
           clearInterval(interval);
           socket.close();
@@ -173,7 +176,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         try {
           const response = JSON.parse(msg.toString());
           console.log('Cihaz yanıtı alındı:', response);
-          
+
           if (response.type === 'ESP_LED_DEVICE') {
             const newDevice: WiFiDevice = {
               id: response.id || rinfo.address,
@@ -218,7 +221,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
   const connectDevice = useCallback(async (device: WiFiDevice) => {
     try {
       console.log(`ESP cihazına bağlanılıyor: ${device.name} (${device.ipAddress}:${device.port})`);
-      
+
       if (Platform.OS === 'web') {
         console.log(`Mock bağlantı kuruldu: ${device.name}`);
         const updatedDevice = { ...device, isConnected: true };
@@ -231,10 +234,10 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
       const dgram = require('react-native-udp');
       const socket = dgram.createSocket('udp4');
-      
+
       socket.bind(() => {
         console.log(`Bağlantı kuruldu: ${device.name}`);
-        
+
         setUdpSocket(socket);
         const updatedDevice = { ...device, isConnected: true };
         setConnectedDevice(updatedDevice);
@@ -262,7 +265,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         console.error("Disconnect error:", error);
       }
     }
-    
+
     if (connectedDevice) {
       setDevices((prev) =>
         prev.map((d) => (d.id === connectedDevice.id ? { ...d, isConnected: false } : d))
@@ -291,7 +294,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
     try {
       const packet = Buffer.from([0, r, g, b]);
-      
+
       udpSocket.send(
         packet,
         0,
@@ -320,7 +323,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
       const regions = [colors.top, colors.right, colors.bottom, colors.left];
       const rgbValues: number[] = [];
-      
+
       for (const color of regions) {
         rgbValues.push(...hexToRgbBytes(color));
       }
@@ -337,7 +340,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
       try {
         const packet = Buffer.from([1, ...rgbValues]);
-        
+
         udpSocket.send(
           packet,
           0,
