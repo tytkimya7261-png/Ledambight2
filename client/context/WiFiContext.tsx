@@ -2,15 +2,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
 import { Platform, PermissionsAndroid } from "react-native";
 
-// Platform bazlı import
-let dgram: any = null;
-let WifiManager: any = null;
-
-if (Platform.OS !== 'web') {
-  dgram = require('react-native-udp');
-  WifiManager = require('react-native-wifi-reborn').default;
-}
-
 export interface WiFiDevice {
   id: string;
   name: string;
@@ -67,7 +58,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
   const [udpSocket, setUdpSocket] = useState<any>(null);
 
   useEffect(() => {
-    // WiFi durumunu kontrol et
     checkWiFiStatus();
   }, []);
 
@@ -78,6 +68,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const WifiManager = require("react-native-wifi-reborn").default;
       const isEnabled = await WifiManager.isEnabled();
       setIsWiFiEnabled(isEnabled);
     } catch (error) {
@@ -86,7 +77,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Android için WiFi izinlerini iste
   const requestWiFiPermissions = async () => {
     if (Platform.OS === "android") {
       try {
@@ -107,7 +97,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  // RGB rengini byte array'e çevir
   const hexToRgbBytes = (hex: string): number[] => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     if (!result) return [0, 0, 0];
@@ -121,12 +110,10 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
   const startScan = useCallback(async () => {
     console.log('startScan çağrıldı');
     
-    // Web platformu için mock veriler kullan
     if (Platform.OS === 'web') {
       setIsScanning(true);
       setDevices([]);
       
-      // Mock tarama simülasyonu
       setTimeout(() => {
         console.log('Mock cihazlar yükleniyor...');
         setDevices(MOCK_DEVICES);
@@ -136,7 +123,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Mobil platformlar için gerçek WiFi taraması
     const hasPermissions = await requestWiFiPermissions();
     if (!hasPermissions) {
       console.log("WiFi permissions not granted");
@@ -149,14 +135,13 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     try {
       console.log('Gerçek WiFi taraması başlatılıyor...');
       
-      // ESP cihazlarını bulmak için UDP broadcast kullan
+      const dgram = require('react-native-udp');
       const socket = dgram.createSocket('udp4');
       
       socket.bind(BROADCAST_PORT, () => {
         socket.setBroadcast(true);
         console.log(`UDP socket ${BROADCAST_PORT} portunda dinlemeye başladı`);
         
-        // Her 3 saniyede bir discovery mesajı gönder
         const sendDiscovery = () => {
           const discoveryMessage = Buffer.from('ESP_LED_DISCOVERY');
           socket.send(
@@ -172,13 +157,10 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
           );
         };
 
-        // İlk mesajı hemen gönder
         sendDiscovery();
         
-        // Her 3 saniyede bir tekrar gönder
         const interval = setInterval(sendDiscovery, 3000);
         
-        // 30 saniye sonra taramayı durdur
         setTimeout(() => {
           clearInterval(interval);
           socket.close();
@@ -187,7 +169,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         }, 30000);
       });
 
-      // ESP cihazlarından gelen yanıtları dinle
       socket.on('message', (msg: Buffer, rinfo: any) => {
         try {
           const response = JSON.parse(msg.toString());
@@ -238,7 +219,6 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`ESP cihazına bağlanılıyor: ${device.name} (${device.ipAddress}:${device.port})`);
       
-      // Web platformu için mock bağlantı
       if (Platform.OS === 'web') {
         console.log(`Mock bağlantı kuruldu: ${device.name}`);
         const updatedDevice = { ...device, isConnected: true };
@@ -249,7 +229,7 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Mobil platformlar için gerçek UDP bağlantısı
+      const dgram = require('react-native-udp');
       const socket = dgram.createSocket('udp4');
       
       socket.bind(() => {
@@ -299,13 +279,11 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
 
     const [r, g, b] = hexToRgbBytes(color);
 
-    // Web platformu için mock gönderme
     if (Platform.OS === 'web') {
       console.log(`[MOCK] Renk gönderildi RGB(${r}, ${g}, ${b}) -> ${connectedDevice.name}`);
       return;
     }
 
-    // Mobil platformlar için gerçek UDP gönderimi
     if (!udpSocket) {
       console.log('Socket açık değil');
       return;
@@ -347,13 +325,11 @@ export function WiFiProvider({ children }: { children: ReactNode }) {
         rgbValues.push(...hexToRgbBytes(color));
       }
 
-      // Web platformu için mock gönderme
       if (Platform.OS === 'web') {
         console.log(`[MOCK] Bölge renkleri gönderildi -> ${connectedDevice.name}`, colors);
         return;
       }
 
-      // Mobil platformlar için gerçek UDP gönderimi
       if (!udpSocket) {
         console.log('Socket açık değil');
         return;
