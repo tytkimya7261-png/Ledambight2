@@ -163,7 +163,7 @@ export default function CalibrationScreen() {
 
   if (!permission.granted) {
     const canAskAgain = permission.canAskAgain;
-    
+
     return (
       <ThemedView style={[styles.container, { backgroundColor: Colors.dark.backgroundRoot }]}>
         <View style={[styles.permissionContainer, { paddingTop: insets.top + Spacing.xl }]}>
@@ -174,7 +174,7 @@ export default function CalibrationScreen() {
           <ThemedText style={styles.permissionDescription}>
             TV alanını kalibre etmek için kamera erişimine ihtiyacımız var.
           </ThemedText>
-          
+
           {canAskAgain ? (
             <Pressable
               style={({ pressed }) => [styles.permissionButton, pressed && styles.buttonPressed]}
